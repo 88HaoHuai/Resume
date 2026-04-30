@@ -1,0 +1,1 @@
+function t(n){return chrome.runtime.sendMessage(n)}async function o(n,r){const[e]=await chrome.tabs.query({active:!0,currentWindow:!0});if(!(e!=null&&e.id))throw new Error("No active tab found");return chrome.tabs.sendMessage(e.id,n)}export{t as a,o as s};

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BOSS 直聘助手</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- 顶部标题栏 -->
+    <header class="popup-header">
+      <div class="header-left">
+        <span class="header-icon">🤖</span>
+        <h1>BOSS 助手</h1>
+      </div>
+      <div class="header-status">
+        <span class="status-dot" id="statusDot"></span>
+        <span class="status-text" id="statusText">就绪</span>
+      </div>
+    </header>
+
+    <!-- 标签页导航 -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="control">控制台</button>
+      <button class="tab-btn" data-tab="filter">筛选</button>
+      <button class="tab-btn" id="btnOpenBlacklist">🚫 黑名单</button>
+      <button class="tab-btn" data-tab="records">记录</button>
+      <button class="tab-btn" data-tab="resume">简历</button>
+    </nav>
+
+    <!-- ===== 控制台 ===== -->
+    <div class="tab-panel active" id="tab-control">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="dailyCount">0</div>
+          <div class="stat-label">今日投递</div>
+          <div class="stat-sub" id="dailyLimit">/ 150</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="appliedCount">0</div>
+          <div class="stat-label">本轮成功</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="skippedCount">0</div>
+          <div class="stat-label">已跳过</div>
+        </div>
+      </div>
+      <div class="control-actions">
+        <button class="btn btn-primary" id="btnStart">▶ 开始投递</button>
+        <button class="btn btn-warning" id="btnPause" style="display:none">⏸ 暂停</button>
+        <button class="btn btn-danger" id="btnStop" style="display:none">⏹ 停止</button>
+      </div>
+      <div class="form-group" style="margin-top: 10px;">
+        <label>每次投递数量 <small>(达到后自动停止)</small></label>
+        <input type="number" id="maxApplyCount" value="50" min="1" max="500" style="width:100%;box-sizing:border-box;">
+      </div>
+      <div class="info-tip">
+        <span>💡</span>
+        <span>请先打开 BOSS 直聘搜索页面，再点击"开始投递"</span>
+      </div>
+    </div>
+
+    <!-- ===== 筛选条件 ===== -->
+    <div class="tab-panel" id="tab-filter">
+      <div class="form-group">
+        <label>薪资范围 (K)</label>
+        <div class="inline-inputs">
+          <input type="number" id="minSalary" placeholder="最低" min="0">
+          <span>-</span>
+          <input type="number" id="maxSalary" placeholder="最高" min="0">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>排除关键词 <small>(逗号分隔)</small></label>
+        <input type="text" id="excludeKeywords" placeholder="外包, 驻场, 实习">
+      </div>
+      <div class="form-group">
+        <label>包含关键词 <small>(逗号分隔)</small></label>
+        <input type="text" id="includeKeywords" placeholder="">
+      </div>
+      <div class="info-tip" style="margin-bottom:10px;">
+        <span>🚫</span>
+        <span>公司黑名单已独立为单独页面，支持批量导入导出和模糊匹配</span>
+        <button class="btn btn-small" id="btnGoBlacklist" style="margin-left:8px;">前往管理 →</button>
+      </div>
+      <div class="form-group checkbox-group">
+        <label>
+          <input type="checkbox" id="onlyActiveHR">
+          <span>只投递活跃 HR</span>
+        </label>
+      </div>
+      <button class="btn btn-primary btn-full" id="btnSaveFilter">保存筛选条件</button>
+    </div>
+
+    <!-- ===== 简历 ===== -->
+    <div class="tab-panel" id="tab-resume">
+      <div class="form-group">
+        <label>DeepSeek API Key</label>
+        <input type="password" id="apiKeyInput" placeholder="sk-..." style="width:100%;box-sizing:border-box;">
+        <small style="color:#94a3b8;font-size:11px;">用于 AI 分析岗位匹配度和优化简历</small>
+      </div>
+      <div class="form-group">
+        <label>简历版本</label>
+        <select id="resumeVersionSelect" style="width:100%;box-sizing:border-box;">
+          <option value="">加载中...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>简历预览</label>
+        <div id="resumePreview" style="max-height:120px;overflow-y:auto;background:rgba(0,0,0,0.2);padding:8px;border-radius:6px;font-size:11px;color:#94a3b8;">
+          未加载
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-primary btn-full" id="btnSaveApiKey" style="flex:1;">💾 保存 Key</button>
+        <button class="btn btn-full" id="btnOpenDashboard" style="flex:1;">📊 打开看板</button>
+      </div>
+      <div class="info-tip" style="margin-top:8px;">
+        <span>💡</span>
+        <span>完整简历管理和 AI 优化功能请打开看板</span>
+      </div>
+    </div>
+
+    <!-- ===== 投递记录 ===== -->
+    <div class="tab-panel" id="tab-records">
+      <div class="records-header">
+        <span id="recordsCount">共 0 条记录</span>
+        <button class="btn btn-small" id="btnExport">导出 CSV</button>
+      </div>
+      <div class="records-list" id="recordsList"></div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

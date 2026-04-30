@@ -1,0 +1,68 @@
+{
+  "manifest_version": 3,
+  "name": "BOSS 直聘自动投递助手",
+  "version": "1.0.0",
+  "description": "辅助在 BOSS 直聘上高效筛选与投递简历的浏览器插件",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs",
+    "notifications",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://www.zhipin.com/*",
+    "https://zhipin.com/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.zhipin.com/*",
+        "https://zhipin.com/*"
+      ],
+      "js": [
+        "utils/constants.js",
+        "utils/helpers.js",
+        "utils/logger.js",
+        "services/storageService.js",
+        "services/filterService.js",
+        "services/templateService.js",
+        "services/apiKeyService.js",
+        "services/resumeService.js",
+        "services/jobMemoryService.js",
+        "services/optimizationService.js",
+        "services/analyticsService.js",
+        "services/presetResume.js",
+        "content/jobParser.js",
+        "content/mouseSimulator.js",
+        "content/resumeSender.js",
+        "content/autoApply.js",
+        "content/chatResumeSender.js",
+        "content/diagnostic.js",
+        "content/uiInjector.js",
+        "content/content.js"
+      ],
+      "css": [
+        "content/content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  }
+}

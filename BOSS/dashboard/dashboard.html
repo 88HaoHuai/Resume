@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>简历优化中心 - BOSS 助手</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- 顶部导航 -->
+    <header class="app-header">
+      <div class="header-brand">
+        <span class="brand-icon">🎯</span>
+        <h1>简历优化中心</h1>
+      </div>
+      <div class="header-actions">
+        <span class="api-status" id="apiStatus">🔴 API 未配置</span>
+        <button class="btn btn-small" id="btnSettings">⚙ 设置</button>
+      </div>
+    </header>
+
+    <!-- 标签页导航 -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="resume">📝 简历管理</button>
+      <button class="tab-btn" data-tab="jobs">🔍 岗位分析</button>
+      <button class="tab-btn" data-tab="stats">📊 数据统计</button>
+    </nav>
+
+    <!-- ========== 简历管理 ========== -->
+    <div class="tab-panel active" id="panel-resume">
+      <div class="panel-grid">
+        <!-- 左侧：简历编辑器 -->
+        <div class="panel-editor">
+          <div class="section-header">
+            <h3>基础简历 (Markdown)</h3>
+            <div class="section-actions">
+              <button class="btn btn-small" id="btnImport">📥 导入</button>
+              <button class="btn btn-small btn-primary" id="btnSaveResume">💾 保存</button>
+            </div>
+          </div>
+          <textarea id="resumeEditor" placeholder="请在此粘贴 Markdown 格式的简历...&#10;&#10;## 个人信息&#10;- 姓名：张三&#10;- 邮箱：...&#10;- 电话：...&#10;&#10;## 技能&#10;- Java, Python, Go&#10;&#10;## 工作经历&#10;### XX公司 (2020-至今)&#10;...&#10;&#10;## 项目经验&#10;### 项目A&#10;...&#10;&#10;## 教育背景&#10;..."></textarea>
+          <div class="editor-hint">
+            <span>💡 支持 Markdown 语法，简历结构越清晰，AI 优化效果越好</span>
+          </div>
+        </div>
+
+        <!-- 右侧：版本列表和预览 -->
+        <div class="panel-versions">
+          <div class="section-header">
+            <h3>简历版本</h3>
+            <span class="version-count" id="versionCount">0 个版本</span>
+          </div>
+          <div class="version-list" id="versionList">
+            <div class="empty-state">暂无版本，请先保存基础简历</div>
+          </div>
+          <div class="section-header" style="margin-top:16px;">
+            <h3>预览</h3>
+          </div>
+          <div class="preview-box" id="previewBox">
+            <div class="empty-state">选择版本查看预览</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 岗位分析 ========== -->
+    <div class="tab-panel" id="panel-jobs">
+      <div class="panel-grid">
+        <!-- 左侧：岗位列表 -->
+        <div class="panel-list">
+          <div class="section-header">
+            <h3>已投递岗位</h3>
+            <div>
+              <input type="text" id="jobSearch" placeholder="搜索岗位..." class="input-search">
+              <button class="btn btn-small btn-primary" id="btnBatchAnalyze" style="margin-left:4px;">📊 批量分析</button>
+            </div>
+          </div>
+          <div class="job-list" id="jobList">
+            <div class="empty-state">暂无投递记录</div>
+          </div>
+        </div>
+
+        <!-- 右侧：分析结果 -->
+        <div class="panel-analysis" id="panelAnalysis">
+          <div class="section-header">
+            <h3>匹配分析</h3>
+            <button class="btn btn-small btn-accent" id="btnGenerateResume" style="display:none;">✨ 生成优化版</button>
+          </div>
+          <div class="analysis-content" id="analysisContent">
+            <div class="empty-state">点击左侧岗位查看分析</div>
+          </div>
+          <div class="optimized-result" id="optimizedResult" style="display:none;">
+            <div class="section-header">
+              <h3>优化后简历</h3>
+              <div>
+                <button class="btn btn-small btn-primary" id="btnSaveOptimized">💾 保存为版本</button>
+                <button class="btn btn-small" id="btnDiscardOptimized">✕ 放弃</button>
+              </div>
+            </div>
+            <div class="preview-box" id="optimizedPreview"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 数据统计 ========== -->
+    <div class="tab-panel" id="panel-stats">
+      <!-- 概览卡片 -->
+      <div class="stats-overview" id="statsOverview">
+        <div class="stat-card">
+          <div class="stat-value" id="statTotalApplied">0</div>
+          <div class="stat-label">总投递</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statReplied">0</div>
+          <div class="stat-label">已回复</div>
+        </div>
+        <div class="stat-card highlight">
+          <div class="stat-value" id="statResponseRate">0%</div>
+          <div class="stat-label">回复率</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statPending">0</div>
+          <div class="stat-label">待回复</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statVersionCount">0</div>
+          <div class="stat-label">简历版本</div>
+        </div>
+      </div>
+
+      <!-- 版本效果对比 -->
+      <div class="section-panel">
+        <div class="section-header">
+          <h3>版本效果对比</h3>
+          <button class="btn btn-small" id="btnRefreshStats">🔄 刷新</button>
+        </div>
+        <div class="table-wrapper">
+          <table class="stats-table" id="versionStatsTable">
+            <thead>
+              <tr>
+                <th>版本名称</th>
+                <th>类型</th>
+                <th>投递数</th>
+                <th>有回应</th>
+                <th>已回复</th>
+                <th>回复率</th>
+                <th>创建时间</th>
+              </tr>
+            </thead>
+            <tbody id="versionStatsBody">
+              <tr><td colspan="7" class="empty-cell">暂无数据</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 优化建议 + 关键词 -->
+      <div class="panel-grid">
+        <div class="section-panel">
+          <div class="section-header"><h3>优化建议</h3></div>
+          <div id="optimizationSuggestions" class="suggestion-list">
+            <div class="empty-state">请先积累投递数据</div>
+          </div>
+        </div>
+        <div class="section-panel">
+          <div class="section-header"><h3>高回复率关键词</h3></div>
+          <div id="keywordCloud" class="keyword-cloud">
+            <div class="empty-state">请先积累回复数据</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 设置弹窗 ========== -->
+    <div class="modal-overlay" id="settingsModal" style="display:none;">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3>⚙ API 配置</h3>
+          <button class="btn-close" id="btnCloseSettings">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>DeepSeek API Key</label>
+            <input type="password" id="apiKeyInput" placeholder="sk-..." class="input-full">
+            <small>密钥将加密存储在本地，仅在调用 API 时使用</small>
+          </div>
+          <div class="form-group">
+            <label>API Base URL</label>
+            <input type="text" id="apiBaseUrl" placeholder="https://api.deepseek.com/v1" class="input-full">
+          </div>
+          <div class="form-group">
+            <label>模型</label>
+            <select id="apiModel" class="input-full">
+              <option value="deepseek-v4">deepseek-v4</option>
+              <option value="deepseek-chat">deepseek-chat (V3)</option>
+              <option value="deepseek-reasoner">deepseek-reasoner (R1)</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-small" id="btnValidateKey">🔍 验证 Key</button>
+            <button class="btn btn-small btn-primary" id="btnSaveApiConfig">💾 保存配置</button>
+          </div>
+          <div id="apiValidationResult" style="margin-top:8px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <!-- 所有依赖的脚本（独立页面需手动加载） -->
+  <script src="../utils/constants.js"></script>
+  <script src="../utils/helpers.js"></script>
+  <script src="../utils/logger.js"></script>
+  <script src="../services/storageService.js"></script>
+  <script src="../services/apiKeyService.js"></script>
+  <script src="../services/resumeService.js"></script>
+  <script src="../services/jobMemoryService.js"></script>
+  <script src="../services/optimizationService.js"></script>
+  <script src="../services/analyticsService.js"></script>
+  <script src="../services/presetResume.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

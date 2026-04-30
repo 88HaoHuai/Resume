@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>公司黑名单 - BOSS 助手</title>
+  <link rel="stylesheet" href="blacklist.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="page-header">
+      <div class="header-left">
+        <span class="brand-icon">🚫</span>
+        <h1>公司黑名单</h1>
+        <span class="header-count" id="headerCount">0 家</span>
+      </div>
+      <div class="header-right">
+        <button class="btn" id="btnImport">📥 导入</button>
+        <button class="btn" id="btnExport">📤 导出</button>
+      </div>
+    </header>
+
+    <div class="stats-row" id="statsRow">
+      <div class="mini-stat">
+        <span class="mini-stat-value" id="statBlocked">0</span>
+        <span class="mini-stat-label">已屏蔽公司</span>
+      </div>
+      <div class="mini-stat">
+        <span class="mini-stat-value" id="statHitCount">0</span>
+        <span class="mini-stat-label">累计过滤次数</span>
+      </div>
+      <div class="mini-stat">
+        <span class="mini-stat-value" id="statRecentHit">0</span>
+        <span class="mini-stat-label">最近24h过滤</span>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="add-row">
+        <input type="text" id="blAddInput" placeholder="输入公司名，回车添加" class="input" autofocus>
+        <button class="btn btn-primary" id="btnAdd">添加</button>
+      </div>
+      <div class="toolbar-right">
+        <input type="text" id="blSearch" placeholder="搜索..." class="input input-search">
+        <button class="btn btn-danger" id="btnClearAll">清空全部</button>
+      </div>
+    </div>
+
+    <div class="bulk-section">
+      <div class="bulk-header" id="bulkToggle">📋 批量导入 / 从近期投递添加 ▾</div>
+      <div class="bulk-body" id="bulkBody" style="display:none;">
+        <div class="bulk-panel">
+          <div class="bulk-left">
+            <label>粘贴公司名（每行一个，或用逗号/顿号分隔）</label>
+            <textarea id="blBulkInput" rows="5" placeholder="公司A&#10;公司B&#10;公司C"></textarea>
+            <button class="btn btn-primary btn-sm" id="btnBulkAdd">批量添加</button>
+          </div>
+          <div class="bulk-right">
+            <label>从近期投递中添加 <button class="btn btn-sm" id="btnRefreshRecent">🔄 刷新</button></label>
+            <div class="recent-list" id="recentList">
+              <div class="empty-state">点击刷新加载</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="list-container">
+      <table class="bl-table" id="blTable">
+        <thead>
+          <tr>
+            <th style="width:50px;">#</th>
+            <th>公司名称</th>
+            <th style="width:100px;">添加时间</th>
+            <th style="width:60px;">操作</th>
+          </tr>
+        </thead>
+        <tbody id="blTableBody">
+          <tr><td colspan="4" class="empty-cell">黑名单为空</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="../utils/constants.js"></script>
+  <script src="../utils/helpers.js"></script>
+  <script src="../services/storageService.js"></script>
+  <script src="blacklist.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+import { defineManifest } from '@crxjs/vite-plugin';
+
+export default defineManifest({
+  manifest_version: 3,
+  name: '智联招聘自动投递',
+  version: '1.0.0',
+  description: '自动扫描智联招聘职位并一键批量投递简历',
+  permissions: ['storage', 'activeTab', 'scripting', 'alarms', 'debugger'],
+  host_permissions: [
+    'https://www.zhaopin.com/*',
+    'https://*.zhaopin.com/*',
+    'https://passport.zhaopin.com/*',
+  ],
+  action: {
+    default_popup: 'src/popup/index.html',
+    default_title: '智联招聘自动投递',
+  },
+  options_page: 'src/options/index.html',
+  background: {
+    service_worker: 'src/background/index.ts',
+    type: 'module',
+  },
+  content_scripts: [
+    {
+      matches: ['https://www.zhaopin.com/*', 'https://*.zhaopin.com/*'],
+      js: ['src/content/index.ts'],
+      run_at: 'document_idle',
+    },
+  ],
+  icons: {
+    '16': 'public/icons/icon-16.png',
+    '48': 'public/icons/icon-48.png',
+    '128': 'public/icons/icon-128.png',
+  },
+});
