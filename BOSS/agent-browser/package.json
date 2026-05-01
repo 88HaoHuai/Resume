@@ -1,0 +1,18 @@
+{
+  "name": "agent-browser",
+  "version": "1.0.0",
+  "description": "## 推荐方式：连到你自己的 Chrome（不会被检测）",
+  "main": "send-chat-images.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ws": "^8.20.0"
+  }
+}

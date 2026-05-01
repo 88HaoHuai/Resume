@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4F46E5"/>
+      <stop offset="100%" style="stop-color:#7C3AED"/>
+    </linearGradient>
+    <linearGradient id="badge" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#22C55E"/>
+      <stop offset="100%" style="stop-color:#16A34A"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <!-- 背景 -->
+  <rect width="128" height="128" rx="26" fill="url(#bg)"/>
+  <!-- 人物阴影 -->
+  <circle cx="64" cy="44" r="20" fill="white" opacity="0.95" filter="url(#shadow)"/>
+  <!-- 人物身体 -->
+  <ellipse cx="64" cy="96" rx="36" ry="24" fill="white" opacity="0.95" filter="url(#shadow)"/>
+  <!-- 人物头部 -->
+  <circle cx="64" cy="44" r="20" fill="white" opacity="0.98"/>
+  <!-- 颈部连接 -->
+  <rect x="58" y="60" width="12" height="10" rx="4" fill="white"/>
+  <!-- 消息气泡角标 -->
+  <circle cx="100" cy="28" r="22" fill="url(#badge)" filter="url(#shadow)"/>
+  <!-- 气泡内的勾 -->
+  <path d="M90 28 L97 35 L112 20" stroke="white" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -57,6 +57,77 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateStatusUI('idle');
   });
 
+  // ========== 聊天批量发图 ==========
+  const btnChatResume = document.getElementById('btnChatResume');
+  const chatResumeProgress = document.getElementById('chatResumeProgress');
+  let chatResumeRunning = false;
+
+  // 检查当前是否在聊天页
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.url?.includes('/web/geek/chat')) {
+      btnChatResume.style.display = 'block';
+    }
+  } catch (_) {}
+
+  btnChatResume.addEventListener('click', async () => {
+    if (chatResumeRunning) {
+      // 停止
+      await sendMsg({ type: 'stop_chat_resume' });
+      btnChatResume.textContent = '📸 批量发图';
+      btnChatResume.style.background = 'linear-gradient(135deg,#667eea,#764ba2)';
+      chatResumeProgress.style.display = 'none';
+      chatResumeRunning = false;
+    } else {
+      // 开始
+      const resp = await sendMsg({ type: 'start_chat_resume' });
+      if (resp?.success) {
+        btnChatResume.textContent = '⏹ 停止发图';
+        btnChatResume.style.background = 'linear-gradient(135deg,#ef4444,#dc2626)';
+        chatResumeProgress.style.display = 'block';
+        chatResumeProgress.textContent = '正在发送...';
+        chatResumeRunning = true;
+      } else {
+        chatResumeProgress.style.display = 'block';
+        chatResumeProgress.textContent = '❌ ' + (resp?.error || '启动失败，请确认在聊天页面');
+      }
+    }
+  });
+
+  // 清空发送记录
+  const btnClearSent = document.getElementById('btnClearSent');
+  const sentCountEl = document.getElementById('sentCount');
+
+  // 显示已发送数量
+  (async () => {
+    const resp = await sendMsg({ type: 'get_chat_sent_count' });
+    sentCountEl.textContent = resp?.count ? `已记录 ${resp.count} 个` : '';
+  })();
+
+  btnClearSent.addEventListener('click', async () => {
+    await sendMsg({ type: 'clear_chat_sent' });
+    sentCountEl.textContent = '已清空';
+    chatResumeProgress.style.display = 'block';
+    chatResumeProgress.textContent = '发送记录已清空，可重新发送';
+    setTimeout(() => { sentCountEl.textContent = ''; }, 2000);
+  });
+
+  // 监听进度更新
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === 'progress_update' && msg.data?.chatStats) {
+      const s = msg.data.chatStats;
+      chatResumeProgress.style.display = 'block';
+      chatResumeProgress.textContent = `已发送: ${s.sent || 0}  跳过: ${s.skipped || 0}  失败: ${s.failed || 0}`;
+
+      // 如果发完了
+      if (s.sent + s.skipped + s.failed > 0 && msg.data.state === 'idle') {
+        btnChatResume.textContent = '📸 批量发图';
+        btnChatResume.style.background = 'linear-gradient(225deg,#667eea,#764ba2)';
+        chatResumeRunning = false;
+      }
+    }
+  });
+
   // ========== 筛选条件 ==========
   const filterResult = await chrome.storage.local.get('boss_auto_filter');
   const filter = filterResult.boss_auto_filter || {};
@@ -100,6 +171,97 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btnOpenDashboard').addEventListener('click', () => {
     chrome.tabs.create({ url: chrome.runtime.getURL('dashboard/dashboard.html') });
   });
+
+  // ========== 图片简历上传 ==========
+  const resumeImageInput = document.getElementById('resumeImageInput');
+  const resumeImagePreview = document.getElementById('resumeImagePreview');
+  const resumeImageThumb = document.getElementById('resumeImageThumb');
+  const resumeImageSize = document.getElementById('resumeImageSize');
+  const resumeImageStatus = document.getElementById('resumeImageStatus');
+
+  // 加载已保存的图片
+  (async () => {
+    const result = await chrome.storage.local.get('boss_resume_image');
+    if (result.boss_resume_image) {
+      resumeImagePreview.style.display = 'block';
+      resumeImageThumb.src = result.boss_resume_image;
+      const sizeKB = (result.boss_resume_image.length * 0.75 / 1024).toFixed(1);
+      resumeImageSize.textContent = `约 ${sizeKB} KB (Base64)`;
+      resumeImageStatus.style.display = 'block';
+      resumeImageStatus.textContent = '✅ 图片已就绪，可直接使用批量发图';
+    }
+  })();
+
+  // 选择图片
+  resumeImageInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // 检查类型
+    if (!file.type.startsWith('image/')) {
+      resumeImageStatus.style.display = 'block';
+      resumeImageStatus.style.color = '#ef4444';
+      resumeImageStatus.textContent = '❌ 请选择图片文件';
+      return;
+    }
+
+    // 检查大小 (2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      resumeImageStatus.style.display = 'block';
+      resumeImageStatus.style.color = '#ef4444';
+      resumeImageStatus.textContent = '❌ 图片不能超过 2MB';
+      return;
+    }
+
+    // 读取为 base64
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const base64 = ev.target.result;
+
+      // 压缩大图片
+      let finalData = base64;
+      if (base64.length > 500 * 1024) {
+        finalData = await compressImage(base64, 800);
+      }
+
+      // 保存到 storage
+      await chrome.storage.local.set({ boss_resume_image: finalData });
+
+      // 显示预览
+      resumeImagePreview.style.display = 'block';
+      resumeImageThumb.src = finalData;
+      const sizeKB = (finalData.length * 0.75 / 1024).toFixed(1);
+      resumeImageSize.textContent = `约 ${sizeKB} KB`;
+      resumeImageStatus.style.display = 'block';
+      resumeImageStatus.style.color = '#22c55e';
+      resumeImageStatus.textContent = '✅ 图片已保存，可切换到控制台使用批量发图';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // 清除图片
+  document.getElementById('btnClearImage').addEventListener('click', async () => {
+    await chrome.storage.local.remove('boss_resume_image');
+    resumeImageInput.value = '';
+    resumeImagePreview.style.display = 'none';
+    resumeImageStatus.style.display = 'none';
+  });
+
+  // 图片压缩
+  function compressImage(base64, maxWidth) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width, h = img.height;
+        if (w > maxWidth) { h = (h * maxWidth) / w; w = maxWidth; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = base64;
+    });
+  }
 
   // ========== 投递记录 ==========
   await loadRecords();

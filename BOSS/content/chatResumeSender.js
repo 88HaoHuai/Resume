@@ -46,6 +46,8 @@ const ChatResumeSender = {
   stop() {
     BossLogger.info('⏹ 停止批量发图');
     this._isRunning = false;
+    StorageService.setRunningState(PLUGIN_STATE.IDLE);
+    this._notifyProgress();
   },
 
   /**
@@ -263,8 +265,28 @@ const ChatResumeSender = {
   async _runLoop() {
     const sentList = await this._getSentList();
     const contacts = this._getContactList();
+
+    // 诊断：输出搜索到的联系人详情
+    if (contacts.length > 0) {
+      const sample = contacts.slice(0, 3).map(c =>
+        (c.textContent || '').trim().substring(0, 25)
+      ).join(', ');
+      BossLogger.info(`联系人示例: ${sample}${contacts.length > 3 ? '...' : ''}`);
+    }
+
     if (!contacts.length) {
-      BossLogger.warn('未找到联系人列表');
+      // 紧急降级：输出页面诊断信息
+      BossLogger.warn('未找到联系人列表，输出诊断...');
+      const diag = {
+        allLis: document.querySelectorAll('li').length,
+        leftLis: Array.from(document.querySelectorAll('li')).filter(li => {
+          const r = li.getBoundingClientRect();
+          return r.x < 500 && r.width > 100 && r.height > 30;
+        }).length,
+        listElements: document.querySelectorAll('ul, [role="list"], [class*="list"], [class*="contact"], [class*="chat"], [class*="user"]').length,
+        url: location.href,
+      };
+      BossLogger.warn(`诊断: LIs=${diag.allLis} 左侧LIs=${diag.leftLis} 列表元素=${diag.listElements} URL=${diag.url}`);
       return;
     }
 
@@ -296,17 +318,33 @@ const ChatResumeSender = {
 
       BossLogger.info(`[${i + 1}/${contacts.length}] 发送给: ${contactName}`);
 
-      contact.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      await BossHelper.sleep(300);
-      await MouseSimulator.click(contact);
-      await BossHelper.randomSleep(2000, 3500);
+      // 确保联系人可见
+      contact.scrollIntoView({ behavior: 'instant', block: 'center' });
+      await BossHelper.sleep(200);
+
+      // 多种点击方式确保 Vue 响应
+      const clicked = await this._clickContact(contact);
+      if (!clicked) {
+        BossLogger.warn(`点击联系人失败: ${contactName}`);
+        this._stats.failed++;
+        this._notifyProgress();
+        continue;
+      }
+
+      await BossHelper.randomSleep(2500, 4000);
 
       const loaded = await this._waitChatLoaded();
       if (!loaded) {
         BossLogger.warn(`聊天加载失败: ${contactName}`);
-        this._stats.failed++;
-        this._notifyProgress();
-        continue;
+        // 重试一次
+        await this._clickContact(contact);
+        await BossHelper.sleep(3000);
+        const retry = await this._waitChatLoaded();
+        if (!retry) {
+          this._stats.failed++;
+          this._notifyProgress();
+          continue;
+        }
       }
 
       const success = await this._sendImage(file);
@@ -332,44 +370,50 @@ const ChatResumeSender = {
    * ========== 图片发送核心：多策略尝试 ==========
    */
   async _sendImage(file) {
-    // 方案 1：找 btn-sendimg 内的 INPUT，直接注入文件 + 等 send 按钮 enabled + 点击
-    BossLogger.debug('--- 方案1: 直接注入INPUT + 点击发送按钮 ---');
+    // 方案 1（主）：找 file input 注入 + Vue 组件联动 + 等发送按钮
+    BossLogger.debug('--- 方案1: input注入 + Vue联动 ---');
     if (await this._injectViaSendImgInput(file)) return true;
 
-    // 方案 2：注入 data URL 到编辑器
-    BossLogger.debug('--- 方案2: dataURL注入 ---');
-    if (await this._injectDataURLToEditor(file)) return true;
-
-    // 方案 3：粘贴
-    BossLogger.debug('--- 方案3: 粘贴 ---');
-    if (await this._pasteImage(file)) return true;
-
-    // 方案 4：showOpenFilePicker mock
-    BossLogger.debug('--- 方案4: mock FSP ---');
+    // 方案 2：mock showOpenFilePicker + 点击图片按钮（最接近真人操作）
+    BossLogger.debug('--- 方案2: mock FSP + 真实点击 ---');
     if (await this._interceptFilePickerAndClick(file, 'mock')) return true;
 
-    // 方案 5：暴力注入
+    // 方案 3：AbortError 降级（触发 BOSS 回退到 input）
+    BossLogger.debug('--- 方案3: AbortError降级 ---');
+    if (await this._interceptFilePickerAndClick(file, 'abort')) return true;
+
+    // 方案 4：dataURL 注入到编辑器 DOM
+    BossLogger.debug('--- 方案4: dataURL注入 ---');
+    if (await this._injectDataURLToEditor(file)) return true;
+
+    // 方案 5：暴力注入所有 file input
+    BossLogger.debug('--- 方案5: 暴力注入 ---');
     if (await this._bruteForceInput(file)) return true;
 
     return false;
   },
 
   /**
-   * ★ 新主策略：直接注入文件到 btn-sendimg 内的 INPUT
-   * BOSS DOM 结构：
-   *   DIV.btn-sendimg (title="发送图片")
-   *     └── INPUT (accept="image/*")  ← 注入到这里
-   *   发送按钮: BUTTON.btn-send (初始 disabled，图片就绪后 enabled)
+   * ★ 策略1（主）：利用 Vue 组件实例直接注入图片
+   *
+   * BOSS 聊天页 Vue 组件结构（推测）：
+   *   ChatInput 组件
+   *     ├── 富文本编辑器
+   *     ├── #pic1688-toolbar > btn-sendimg（含隐藏 input[type=file]）
+   *     └── btn-send（disabled 直到图片就绪）
+   *
+   * Vue 组件监听 input.change 事件 → 读取 files → 更新 data → 通知 send 按钮
+   *
+   * 问题：手动设置 input.files + dispatchEvent 时，Vue 的 patchEvent 可能拦截不到
+   * 解决：同时尝试多种事件触发方式 + 直接操作 Vue 组件数据
    */
   async _injectViaSendImgInput(file) {
-    // 1. 找 btn-sendimg 按钮
     const sendImgBtn = this._findSendImgButton();
     if (!sendImgBtn) {
       BossLogger.debug('sendimg: 未找到 btn-sendimg');
       return false;
     }
 
-    // 2. 找其中的 file input
     const fileInput = sendImgBtn.querySelector('input[type="file"]');
     if (!fileInput) {
       BossLogger.debug('sendimg: btn-sendimg 内无 input');
@@ -378,104 +422,292 @@ const ChatResumeSender = {
 
     BossLogger.debug(`sendimg: 找到 input accept="${fileInput.accept || '(none)'}"`);
 
-    // 3. 注入文件（Vue 兼容方式）
+    // ---- 步骤1：通过 DataTransfer 注入文件 ----
     const dt = new DataTransfer();
     dt.items.add(file);
 
-    const filesDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files');
-    if (filesDesc?.set) {
-      filesDesc.set.call(fileInput, dt.files);
-    } else {
-      fileInput.files = dt.files;
+    // 方式A：原型 setter（绕过 Vue getter/setter）
+    const protoDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files');
+    if (protoDesc?.set) {
+      try { protoDesc.set.call(fileInput, dt.files); } catch (_) {}
+    }
+    // 方式B：直接赋值
+    try { fileInput.files = dt.files; } catch (_) {}
+
+    // ---- 步骤2：多种方式触发 Vue 更新 ----
+    // 2a. 标准事件
+    fileInput.dispatchEvent(new Event('input', { bubbles: true, cancelable: true, composed: true }));
+    fileInput.dispatchEvent(new Event('change', { bubbles: true, cancelable: true, composed: true }));
+
+    // 2b. 通过 Vue 实例触发（如果找到组件实例）
+    const vueComp = this._findChatVueComponent();
+    if (vueComp) {
+      BossLogger.debug('sendimg: 找到 Vue 组件，尝试直接触发');
+      // 尝试调用组件的文件处理方法
+      const handlers = ['handleFileChange', 'onFileChange', 'handleImageUpload', 'uploadFile',
+                        'handleInput', 'onInput', 'fileChange', 'changeHandler'];
+      for (const h of handlers) {
+        if (typeof vueComp[h] === 'function') {
+          try {
+            vueComp[h]({ target: fileInput, files: dt.files });
+            BossLogger.info(`sendimg: 调用 vue.${h} 成功`);
+            break;
+          } catch (_) {}
+        }
+      }
+      // 强制触发 Vue 更新
+      if (vueComp.$forceUpdate) vueComp.$forceUpdate();
     }
 
-    if (fileInput._valueTracker) {
-      fileInput._valueTracker.setValue('');
-    }
+    // 2c. 额外的事件触发（某些 Vue 版本需要）
+    await BossHelper.sleep(100);
+    fileInput.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
+    fileInput.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+    fileInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    fileInput.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
 
-    // 触发事件
-    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
-    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    BossLogger.debug('sendimg: 文件已注入，等待发送按钮...');
 
-    BossLogger.debug('sendimg: 文件已注入，等待发送按钮 enabled...');
-
-    // 4. 等待发送按钮变为 enabled（最多等 10 秒）
+    // ---- 步骤3：等待发送按钮 enabled（MutationObserver + 轮询）----
     const sendBtn = await this._waitForSendButtonEnabled();
     if (sendBtn) {
-      BossLogger.info('sendimg: 发送按钮已 enabled，点击发送');
-      await MouseSimulator.click(sendBtn);
-      await BossHelper.sleep(2000);
+      BossLogger.info('sendimg: 发送按钮就绪，点击发送');
+      await this._forceClickSend(sendBtn);
       return true;
     }
 
-    // 5. 降级：直接尝试 Enter 或找发送按钮
-    BossLogger.debug('sendimg: 发送按钮未 enabled，尝试其他方式');
-    await BossHelper.sleep(3000);
-
-    for (let i = 0; i < 3; i++) {
-      if (await this._clickSendButton()) return true;
-      await BossHelper.sleep(1000);
+    // ---- 步骤4：降级 - 强制发送 ----
+    BossLogger.debug('sendimg: 超时，强制发送...');
+    for (let i = 0; i < 5; i++) {
+      await BossHelper.sleep(1500);
+      if (await this._forceClickSend()) return true;
     }
 
     return false;
   },
 
   /**
-   * 找 btn-sendimg 元素
+   * 在当前页面 DOM 中搜索聊天输入区的 Vue 组件实例
    */
-  _findSendImgButton() {
-    // 精确匹配
-    const selectors = [
-      '.btn-sendimg',
-      '[class*="btn-sendimg"]',
-      '[title="发送图片"]',
-      '.toolbar-btn-content.icon.btn-sendimg',
-    ];
-    for (const sel of selectors) {
-      try {
-        const el = document.querySelector(sel);
-        if (el?.offsetParent) return el;
-      } catch (_) {}
+  _findChatVueComponent() {
+    const toolbar = document.querySelector('#pic1688-toolbar');
+    if (!toolbar) return null;
+
+    // 向上搜索 Vue 组件
+    let el = toolbar;
+    for (let i = 0; i < 8; i++) {
+      if (!el) break;
+      if (el.__vue__) {
+        const vm = el.__vue__;
+        // 检查是否有与聊天输入相关的方法
+        const hasMethods = Object.keys(vm).filter(k =>
+          typeof vm[k] === 'function' &&
+          /file|image|upload|send|input|chat|message/i.test(k)
+        );
+        if (hasMethods.length > 0) {
+          BossLogger.debug(`vue-comp: 在祖先[${i}]找到，方法: ${hasMethods.join(',')}`);
+          return vm;
+        }
+      }
+      el = el.parentElement;
     }
 
-    // 通过 title 匹配
-    for (const el of document.querySelectorAll('div, span, button, i')) {
-      if (!el.offsetParent) continue;
-      const title = (el.getAttribute('title') || '');
-      if (title === '发送图片') return el;
+    // 也搜索 toolbar 内部的 Vue 组件
+    const toolbarVueEls = toolbar.querySelectorAll('[data-v-]');
+    for (const vEl of toolbarVueEls) {
+      if (vEl.__vue__) {
+        const vm = vEl.__vue__;
+        const methods = Object.keys(vm).filter(k => typeof vm[k] === 'function');
+        const relevant = methods.filter(m => /file|image|upload|select/i.test(m));
+        if (relevant.length > 0) {
+          BossLogger.debug(`vue-comp: 在 toolbar 内找到，方法: ${relevant.join(',')}`);
+          return vm;
+        }
+      }
     }
 
     return null;
   },
 
   /**
-   * 等待发送按钮从 disabled 变为 enabled
+   * 查找发送图片按钮（增强版）
    */
-  async _waitForSendButtonEnabled() {
-    const sendSelectors = ['.btn-send', '.btn-sure-v2', 'button.btn-send', '[class*="btn-send"]'];
-
-    for (let i = 0; i < 20; i++) {
-      for (const sel of sendSelectors) {
-        try {
-          const btn = document.querySelector(sel);
-          if (btn && btn.offsetParent && !btn.classList.contains('disabled') && !btn.disabled) {
-            BossLogger.debug(`sendBtn: ${sel} enabled (轮次${i})`);
-            return btn;
-          }
-        } catch (_) {}
-      }
-      await BossHelper.sleep(500);
-    }
-
-    // 降级：即使 disabled 也尝试返回
-    for (const sel of sendSelectors) {
+  _findSendImgButton() {
+    // 1. 精确 CSS
+    for (const sel of ['.btn-sendimg', '[class*="sendimg"]', '[title="发送图片"]']) {
       try {
-        const btn = document.querySelector(sel);
-        if (btn?.offsetParent) return btn;
+        const el = document.querySelector(sel);
+        if (el?.offsetParent) return el;
       } catch (_) {}
     }
 
+    // 2. 通过 #pic1688-toolbar 的工具栏按钮定位
+    const toolbar = document.querySelector('#pic1688-toolbar');
+    if (toolbar) {
+      // BOSS 工具栏中第一个或第二个按钮通常是图片按钮
+      const buttons = toolbar.querySelectorAll('.toolbarButton, [class*="tool-btn"], div[role="button"], button');
+      for (const btn of buttons) {
+        if (!btn.offsetParent) continue;
+        // 检查是否包含 file input
+        if (btn.querySelector('input[type="file"]')) return btn;
+      }
+      // 取第一个可见的工具栏子元素
+      const firstVisible = toolbar.querySelector('.toolbarButton, [class*="btn"]');
+      if (firstVisible?.offsetParent && firstVisible.querySelector('input[type="file"]')) {
+        return firstVisible;
+      }
+    }
+
+    // 3. title/aria-label 匹配
+    for (const el of document.querySelectorAll('div, span, button, label')) {
+      if (!el.offsetParent) continue;
+      const t = (el.getAttribute('title') || el.getAttribute('aria-label') || '').toLowerCase();
+      if (['发送图片', '图片', '照片', 'image', 'photo'].some(k => t === k || t.includes(k))) {
+        return el;
+      }
+    }
+
     return null;
+  },
+
+  /**
+   * 等待发送按钮变为 enabled（MutationObserver + 轮询双保险）
+   */
+  async _waitForSendButtonEnabled() {
+    // 先用 MutationObserver 观察 class 变化，同时轮询
+    const sendBtn = document.querySelector('.btn-send, .btn-sure-v2, [class*="btn-send"]');
+    if (!sendBtn) return null;
+
+    // 如果已经 enabled，直接返回
+    if (!sendBtn.classList.contains('disabled') && !sendBtn.disabled) {
+      BossLogger.debug('sendBtn: 已就绪');
+      return sendBtn;
+    }
+
+    return new Promise((resolve) => {
+      let resolved = false;
+      const done = (btn) => { if (!resolved) { resolved = true; clearTimeout(timer); observer.disconnect(); resolve(btn); } };
+
+      // Observer：监听 class 和 disabled 属性变化
+      const observer = new MutationObserver(() => {
+        if (!sendBtn.classList.contains('disabled') && !sendBtn.disabled) {
+          BossLogger.debug('sendBtn: Observer 检测到 enabled');
+          done(sendBtn);
+        }
+      });
+      observer.observe(sendBtn, { attributes: true, attributeFilter: ['class', 'disabled'] });
+      // 也观察父元素（Vue 可能替换整个按钮）
+      if (sendBtn.parentElement) {
+        observer.observe(sendBtn.parentElement, { attributes: true, subtree: true });
+      }
+
+      // 轮询兜底
+      let pollCount = 0;
+      const poll = async () => {
+        for (let i = 0; i < 30; i++) {
+          if (resolved) return;
+          await BossHelper.sleep(500);
+          pollCount++;
+          for (const sel of ['.btn-send', '.btn-sure-v2', '[class*="btn-send"]']) {
+            try {
+              const btn = document.querySelector(sel);
+              if (btn?.offsetParent && !btn.classList.contains('disabled') && !btn.disabled) {
+                BossLogger.debug(`sendBtn: 轮询检测到 enabled (轮次${pollCount})`);
+                done(btn);
+                return;
+              }
+            } catch (_) {}
+          }
+        }
+        // 超时，返回当前按钮（强制发送）
+        BossLogger.debug('sendBtn: 超时，返回当前状态按钮');
+        done(sendBtn);
+      };
+      poll();
+
+      // 总超时 20 秒
+      const timer = setTimeout(() => {
+        BossLogger.debug('sendBtn: 总超时');
+        done(sendBtn);
+      }, 20000);
+    });
+  },
+
+  /**
+   * 强制点击发送（移除 disabled，多种点击方式）
+   * 返回 true 仅当检测到发送成功的信号
+   */
+  async _forceClickSend(targetBtn) {
+    const btn = targetBtn || document.querySelector('.btn-send, .btn-sure-v2, [class*="btn-send"]');
+    if (!btn) {
+      this._pressEnter();
+      await BossHelper.sleep(2000);
+      // 检查编辑器是否清空
+      return this._checkEditorCleared();
+    }
+
+    // 记录点击前的编辑器内容
+    const editor = document.querySelector('[contenteditable="true"], [role="textbox"], textarea');
+    const prevContent = editor ? (editor.value || editor.textContent || editor.innerHTML || '') : '';
+
+    // 强制移除 disabled
+    btn.classList.remove('disabled');
+    btn.disabled = false;
+    btn.style.pointerEvents = 'auto';
+    btn.style.opacity = '1';
+
+    if (btn.parentElement) {
+      btn.parentElement.classList.remove('disabled');
+    }
+
+    // 多种点击方式
+    btn.click();
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, view: window }));
+    btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, view: window }));
+
+    BossLogger.info('sendBtn: 强制点击发送');
+    await BossHelper.sleep(2500);
+
+    // 检查确认弹窗
+    if (await this._handleSendConfirm()) return true;
+
+    // 检查编辑器是否被清空（发送成功的信号）
+    if (editor) {
+      const currContent = editor.value || editor.textContent || editor.innerHTML || '';
+      if (prevContent && !currContent) {
+        BossLogger.info('sendBtn: 编辑器已清空，发送成功');
+        return true;
+      }
+    }
+
+    // 没有明确信号，保守返回 false
+    BossLogger.warn('sendBtn: 未检测到发送成功信号');
+    return false;
+  },
+
+  /**
+   * 检查编辑器是否被清空
+   */
+  _checkEditorCleared() {
+    const editor = document.querySelector('[contenteditable="true"], [role="textbox"], textarea');
+    if (!editor) return false;
+    const content = (editor.value || editor.textContent || '').trim();
+    return content === '';
+  },
+
+  /**
+   * 在编辑器中按 Enter 键
+   */
+  _pressEnter() {
+    const editor = document.querySelector('[contenteditable="true"], [role="textbox"], textarea');
+    const target = editor || document.body;
+    ['keydown', 'keypress', 'keyup'].forEach(type => {
+      target.dispatchEvent(new KeyboardEvent(type, {
+        key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
+        bubbles: true, cancelable: true, composed: true,
+      }));
+    });
   },
 
   /**
@@ -543,7 +775,9 @@ const ChatResumeSender = {
           if (await this._handleSendConfirm()) return true;
         }
 
-        return true; // 图片已注入到编辑器
+        // 图片已插入编辑器但发送未确认，返回 false 让后续策略尝试
+        BossLogger.warn('dataURL: 图片已注入但发送未确认');
+        return false;
       }
 
       BossLogger.debug('dataURL: 未找到编辑器');
@@ -920,9 +1154,9 @@ const ChatResumeSender = {
         }
       }
 
-      // 5 轮没成功也返回 true（图片可能已插入，只是发送机制不同）
-      BossLogger.info('fsp: 完成（图片可能已在输入区）');
-      return true;
+      // 5 轮都没成功，标记为失败让上层尝试其他策略
+      BossLogger.warn('fsp: 拦截成功但发送失败，返回 false 让后续策略接管');
+      return false;
     }
 
     if (inputIntercepted && capturedInput) {
@@ -1329,54 +1563,110 @@ const ChatResumeSender = {
    * 容器: #toolbarContent DIV.toolbarButton
    */
   _findImageButton() {
-    // 策略1：精确匹配 lucide SVG 图标
-    const svgBtn = document.querySelector('svg.lucide-image, svg[class*="lucide"][class*="image"], svg[class*="image-icon"]');
-    if (svgBtn && svgBtn.offsetParent !== null) {
-      BossLogger.debug('imgBtn: 找到 svg.lucide-image');
-      // 返回可点击的父元素（DIV.toolbarButton）
-      const clickable = svgBtn.closest('.toolbarButton, button, [role="button"]') || svgBtn.parentElement || svgBtn;
-      return clickable;
+    // 策略1：btn-sendimg（BOSS 专用 class）
+    const sendImg = document.querySelector('.btn-sendimg, [class*="btn-sendimg"]');
+    if (sendImg?.offsetParent) {
+      BossLogger.debug('imgBtn: .btn-sendimg');
+      return sendImg;
     }
 
-    // 策略2：通过 #toolbarContent 查找
-    const toolbarContent = document.querySelector('#toolbarContent, .toolbarcontent');
-    if (toolbarContent) {
-      const imgChild = toolbarContent.querySelector('svg[class*="image"], svg[class*="img"], [class*="image-icon"]');
-      if (imgChild && imgChild.offsetParent !== null) {
-        BossLogger.debug('imgBtn: 在 #toolbarContent 中找到');
-        return imgChild.closest('.toolbarButton, button') || imgChild.parentElement || imgChild;
+    // 策略2：#pic1688-toolbar 内的工具栏按钮
+    const toolbar = document.querySelector('#pic1688-toolbar');
+    if (toolbar) {
+      // 找包含 file input 的按钮
+      const btnWithInput = toolbar.querySelector('input[type="file"]')?.closest('div, button, span, label');
+      if (btnWithInput?.offsetParent) return btnWithInput;
+
+      // 找 lucide SVG 图片图标
+      const svg = toolbar.querySelector('svg.lucide-image, svg[class*="image"], svg[class*="img"]');
+      if (svg?.offsetParent) {
+        return svg.closest('[role="button"], button, .toolbarButton, div') || svg.parentElement || svg;
       }
-      // 取 toolbarContent 的第一个可见子元素
-      for (const child of toolbarContent.children) {
-        if (child.offsetParent !== null) {
-          BossLogger.debug(`imgBtn: 使用 #toolbarContent 第一个子元素 <${child.tagName}>`);
-          return child;
+
+      // 第一个可见的工具栏按钮
+      for (const child of toolbar.querySelectorAll('*')) {
+        const r = child.getBoundingClientRect();
+        if (r.width > 10 && r.width < 80 && r.height > 10 && r.height < 60 && child.offsetParent) {
+          return child.closest('button, [role="button"]') || child;
         }
       }
     }
 
-    // 策略3：标题/aria-label 匹配
-    for (const el of document.querySelectorAll('i, span, div, button, label, svg')) {
+    // 策略3：title/aria-label 关键词
+    for (const el of document.querySelectorAll('div, span, button, label, i, svg')) {
       if (!el.offsetParent) continue;
-      const title = (el.getAttribute('title') || el.getAttribute('aria-label') || '').toLowerCase();
-      if (['图片', '照片', '相册', '发送图片', '上传图片', 'image', 'photo', 'picture'].some(t => title.includes(t))) {
-        return el;
-      }
-    }
-
-    // 策略4：class 关键词 + 位置在底部
-    for (const el of document.querySelectorAll('div, i, svg, button, span')) {
-      if (!el.offsetParent) continue;
-      const cls = ((el.className?.baseVal || el.className) || '').toString().toLowerCase();
-      if (['image', 'img', 'photo', 'pic', 'picture'].some(k => cls.includes(k))) {
+      const t = (el.getAttribute('title') || el.getAttribute('aria-label') || '').toLowerCase();
+      if (['发送图片', '图片', '照片', 'image', 'photo'].some(k => t === k || t.includes(k))) {
         const r = el.getBoundingClientRect();
-        if (r.y > 300 && r.width < 120 && r.height < 120) {
-          return el.closest('button, .toolbarButton') || el;
+        if (r.y > 250 && r.width < 120) return el;
+      }
+    }
+
+    // 策略4：class 关键词 + 底部位置
+    const candidates = [];
+    document.querySelectorAll('div, i, svg, button, span').forEach(el => {
+      if (!el.offsetParent) return;
+      const cls = ((el.className?.baseVal || el.className) || '').toString().toLowerCase();
+      if (['image', 'img', 'photo', 'pic'].some(k => cls.includes(k))) {
+        const r = el.getBoundingClientRect();
+        if (r.y > 250 && r.width < 120) {
+          candidates.push({ el, y: r.y });
         }
       }
+    });
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => a.y - b.y);
+      return candidates[0].el.closest('button, .toolbarButton') || candidates[0].el;
     }
 
     return null;
+  },
+
+  /**
+   * 点击联系人（多种方式确保 Vue 响应）
+   */
+  async _clickContact(el) {
+    if (!el) return false;
+    try {
+      // 方式1：原生 click（大多数情况下最可靠）
+      el.click();
+      await BossHelper.sleep(150);
+
+      // 方式2：模拟鼠标事件（部分 Vue 组件需要）
+      const rect = el.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+
+      el.dispatchEvent(new MouseEvent('mousedown', {
+        clientX: cx, clientY: cy, bubbles: true, cancelable: true, view: window,
+      }));
+      el.dispatchEvent(new MouseEvent('mouseup', {
+        clientX: cx, clientY: cy, bubbles: true, cancelable: true, view: window,
+      }));
+      el.dispatchEvent(new MouseEvent('click', {
+        clientX: cx, clientY: cy, bubbles: true, cancelable: true, view: window,
+      }));
+
+      // 方式3：聚焦 + Enter（无障碍处理）
+      el.focus();
+      el.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
+      await BossHelper.sleep(80);
+
+      // 方式4：尝试点击内部链接或按钮
+      const innerClickable = el.querySelector('a, button, [role="button"], .name, [class*="name"], span');
+      if (innerClickable) {
+        innerClickable.click();
+        innerClickable.dispatchEvent(new MouseEvent('click', {
+          clientX: cx, clientY: cy, bubbles: true, cancelable: true, view: window,
+        }));
+      }
+
+      BossLogger.debug(`clickContact: ${(el.textContent || '').trim().substring(0, 25)}`);
+      return true;
+    } catch (e) {
+      BossLogger.debug('clickContact 异常:', e.message);
+      return false;
+    }
   },
 
   // ===================== 联系人列表 =====================
@@ -1530,7 +1820,10 @@ const ChatResumeSender = {
   _notifyProgress() {
     chrome.runtime.sendMessage({
       type: MSG_TYPE.PROGRESS_UPDATE,
-      data: { chatStats: { ...this._stats } },
+      data: {
+        chatStats: { ...this._stats },
+        state: this._isRunning ? 'running' : 'idle',
+      },
     });
   },
 };

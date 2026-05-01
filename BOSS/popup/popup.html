@@ -59,6 +59,21 @@
         <span>💡</span>
         <span>请先打开 BOSS 直聘搜索页面，再点击"开始投递"</span>
       </div>
+
+      <!-- 聊天批量发图 -->
+      <div style="border-top:1px solid rgba(255,255,255,0.1);margin:12px 0;padding-top:12px;">
+        <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">📎 聊天页面批量发送图片简历</div>
+        <button class="btn btn-full" id="btnChatResume" style="background:linear-gradient(135deg,#667eea,#764ba2);">📸 批量发图</button>
+        <div id="chatResumeProgress" style="font-size:11px;color:#94a3b8;margin-top:6px;display:none;"></div>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button class="btn btn-small" id="btnClearSent" style="flex:1;font-size:10px;">🗑 清空发送记录</button>
+          <span id="sentCount" style="font-size:10px;color:#94a3b8;line-height:2;"></span>
+        </div>
+        <div class="info-tip" style="margin-top:6px;">
+          <span>💡</span>
+          <span>先在聊天页面选中联系人，再点击此按钮</span>
+        </div>
+      </div>
     </div>
 
     <!-- ===== 筛选条件 ===== -->
@@ -112,6 +127,20 @@
           未加载
         </div>
       </div>
+      <!-- 图片简历上传 -->
+      <div style="border-top:1px solid rgba(255,255,255,0.1);margin:12px 0;padding-top:12px;">
+        <label style="font-size:12px;color:#cbd5e1;display:block;margin-bottom:6px;">📸 图片简历（用于聊天批量发图）</label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="file" id="resumeImageInput" accept="image/*" style="flex:1;font-size:11px;color:#94a3b8;">
+          <button class="btn btn-small" id="btnClearImage" style="white-space:nowrap;">清除</button>
+        </div>
+        <div id="resumeImagePreview" style="margin-top:6px;text-align:center;display:none;">
+          <img id="resumeImageThumb" style="max-width:100%;max-height:100px;border-radius:6px;">
+          <div id="resumeImageSize" style="font-size:10px;color:#94a3b8;margin-top:2px;"></div>
+        </div>
+        <div id="resumeImageStatus" style="font-size:10px;color:#22c55e;margin-top:4px;display:none;"></div>
+      </div>
+
       <div style="display:flex;gap:6px;">
         <button class="btn btn-primary btn-full" id="btnSaveApiKey" style="flex:1;">💾 保存 Key</button>
         <button class="btn btn-full" id="btnOpenDashboard" style="flex:1;">📊 打开看板</button>

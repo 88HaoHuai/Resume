@@ -22,6 +22,11 @@
       "128": "assets/icon128.png"
     }
   },
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
   "background": {
     "service_worker": "background/service-worker.js",
     "type": "module"
@@ -59,10 +64,5 @@
       ],
       "run_at": "document_idle"
     }
-  ],
-  "icons": {
-    "16": "assets/icon16.png",
-    "48": "assets/icon48.png",
-    "128": "assets/icon128.png"
-  }
+  ]
 }
