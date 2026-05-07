@@ -1,0 +1,20 @@
+{
+  "name": "boss",
+  "version": "1.0.0",
+  "description": "辅助在 [BOSS 直聘](https://www.zhipin.com) 上高效筛选与投递简历的 Chrome 浏览器插件。",
+  "main": "index.js",
+  "scripts": {
+    "build": "node build/protect.js",
+    "build:prod": "node build/protect.js --server https://your-server.com",
+    "dev": "cd server && npm start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "javascript-obfuscator": "^5.4.2"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}

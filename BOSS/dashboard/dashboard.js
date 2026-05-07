@@ -59,7 +59,7 @@
     document.getElementById('btnSettings').addEventListener('click', async () => {
       const config = await ApiKeyService.getApiConfig();
       document.getElementById('apiBaseUrl').value = config.baseUrl || 'https://api.deepseek.com/v1';
-      document.getElementById('apiModel').value = config.model || 'deepseek-v4';
+      document.getElementById('apiModel').value = config.model || 'deepseek-chat';
       document.getElementById('apiKeyInput').value = (await ApiKeyService.getApiKey()) || '';
       document.getElementById('settingsModal').style.display = 'flex';
     });

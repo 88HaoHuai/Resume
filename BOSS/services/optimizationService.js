@@ -115,7 +115,7 @@ const OptimizationService = {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: model || 'deepseek-v4',
+        model: model || 'deepseek-chat',
         messages,
         temperature,
         max_tokens: 4096,

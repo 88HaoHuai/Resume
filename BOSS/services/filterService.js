@@ -50,14 +50,22 @@ const FilterService = {
       return { pass: false, reason: `公司在黑名单中: ${job.companyName}（命中关键词: ${blResult.keyword}）` };
     }
 
-    // 2. 薪资范围检查
+    // 2. 薪资范围检查：岗位薪资区间与用户筛选区间有交集即可通过。
+    // 例如筛选 15-30K 时，20-40K 通过，10-14K/31-50K 跳过。
     if (filter.minSalary > 0 || filter.maxSalary > 0) {
       const salary = BossHelper.parseSalary(job.salary);
-      if (filter.minSalary > 0 && salary.max < filter.minSalary) {
-        return { pass: false, reason: `薪资太低: ${job.salary}` };
-      }
-      if (filter.maxSalary > 0 && salary.min > filter.maxSalary) {
-        return { pass: false, reason: `薪资超出范围: ${job.salary}` };
+      if (!salary.parsed) {
+        BossLogger.warn(`薪资无法解析，跳过薪资过滤: ${job.salary || '(空)'}`);
+      } else {
+        const filterMin = filter.minSalary > 0 ? filter.minSalary : 0;
+        const filterMax = filter.maxSalary > 0 ? filter.maxSalary : Infinity;
+        const hasOverlap = salary.max >= filterMin && salary.min <= filterMax;
+        if (!hasOverlap) {
+          return {
+            pass: false,
+            reason: `薪资不在范围内: ${job.salary}（岗位${salary.min}-${salary.max}K，筛选${filter.minSalary || '不限'}-${filter.maxSalary || '不限'}K）`,
+          };
+        }
       }
     }
 

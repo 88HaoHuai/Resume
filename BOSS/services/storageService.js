@@ -326,7 +326,7 @@ const StorageService = {
 
   async getApiConfig() {
     const result = await this.get(STORAGE_KEYS.API_CONFIG);
-    return result[STORAGE_KEYS.API_CONFIG] || { model: 'deepseek-v4', baseUrl: 'https://api.deepseek.com/v1' };
+    return result[STORAGE_KEYS.API_CONFIG] || { model: 'deepseek-chat', baseUrl: 'https://api.deepseek.com/v1' };
   },
 
   async saveApiConfig(config) {

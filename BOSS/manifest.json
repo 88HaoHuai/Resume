@@ -28,8 +28,7 @@
     "128": "assets/icon128.png"
   },
   "background": {
-    "service_worker": "background/service-worker.js",
-    "type": "module"
+    "service_worker": "background/service-worker.js"
   },
   "content_scripts": [
     {
@@ -41,6 +40,7 @@
         "utils/constants.js",
         "utils/helpers.js",
         "utils/logger.js",
+        "services/licenseService.js",
         "services/storageService.js",
         "services/filterService.js",
         "services/templateService.js",

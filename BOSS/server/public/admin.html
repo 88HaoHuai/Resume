@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BOSS 插件 - License 管理后台</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+.container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+/* Login */
+.login-box { max-width: 400px; margin: 80px auto; background: #1e293b; border-radius: 12px; padding: 32px; border: 1px solid #334155; }
+.login-box h1 { font-size: 20px; margin-bottom: 20px; text-align: center; }
+.login-box input { width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: #e2e8f0; font-size: 14px; margin-bottom: 12px; }
+.login-box button { width: 100%; padding: 10px; background: #4F46E5; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+
+/* Header */
+.header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20px; border-bottom: 1px solid #1e293b; margin-bottom: 24px; flex-wrap:wrap;gap:12px; }
+.header h1 { font-size: 22px; }
+.header-actions { display: flex; gap: 8px; align-items: center; }
+.header-actions .dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }
+.header-actions button { padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; }
+.btn-logout { background: #334155; color: #e2e8f0; }
+
+/* Stats */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.stat-card { background: #1e293b; border-radius: 8px; padding: 16px; border: 1px solid #334155; }
+.stat-card .value { font-size: 28px; font-weight: bold; }
+.stat-card .label { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+.stat-card.total .value { color: #818cf8; }
+.stat-card.active .value { color: #22c55e; }
+.stat-card.unused .value { color: #94a3b8; }
+.stat-card.revoked .value { color: #ef4444; }
+
+/* Generate */
+.gen-box { background: #1e293b; border-radius: 8px; padding: 16px; border: 1px solid #334155; margin-bottom: 24px; }
+.gen-box h3 { font-size: 14px; margin-bottom: 12px; }
+.gen-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+.gen-form label { font-size: 10px; color: #94a3b8; display: block; margin-bottom: 2px; }
+.gen-form input, .gen-form select { padding: 6px 10px; background: #0f172a; border: 1px solid #334155; border-radius: 4px; color: #e2e8f0; font-size: 12px; }
+.gen-form button { padding: 6px 16px; background: #4F46E5; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+.gen-result { margin-top: 12px; padding: 12px; background: #0f172a; border-radius: 6px; border: 1px solid #22c55e; display: none; }
+.gen-result .keys { font-family: 'SF Mono', Monaco, monospace; font-size: 13px; color: #22c55e; word-break: break-all; }
+.gen-result .copy-btn { margin-top: 8px; padding: 4px 10px; font-size: 11px; background: #166534; color: #22c55e; border: 1px solid #22c55e; border-radius: 4px; cursor: pointer; }
+
+/* Table */
+.table-wrap { background: #1e293b; border-radius: 8px; border: 1px solid #334155; overflow: hidden; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; padding: 10px 12px; font-size: 11px; color: #94a3b8; background: #162032; border-bottom: 1px solid #334155; }
+td { padding: 10px 12px; font-size: 12px; border-bottom: 1px solid #1e293b; }
+tr:hover td { background: #162032; }
+.key-cell { font-family: 'SF Mono', Monaco, monospace; color: #818cf8; font-size: 11px; }
+.status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 500; }
+.status.active { background: #166534; color: #22c55e; }
+.status.unused { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+.status.expired { background: #451a03; color: #fbbf24; }
+.status.revoked { background: #450a0a; color: #ef4444; }
+.actions button { padding: 3px 8px; border-radius: 4px; border: 1px solid #334155; cursor: pointer; font-size: 10px; background: transparent; color: #94a3b8; margin-right: 4px; }
+.actions button:hover { background: #334155; }
+.actions button.danger { color: #ef4444; border-color: #450a0a; }
+.actions button.danger:hover { background: #450a0a; }
+.actions button.copy { color: #818cf8; }
+
+/* Toast */
+.toast { position: fixed; top: 16px; right: 16px; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 100; animation: fadeIn .3s; }
+.toast.success { background: #166534; color: #22c55e; border: 1px solid #22c55e; }
+.toast.error { background: #450a0a; color: #ef4444; border: 1px solid #ef4444; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } }
+
+.empty { text-align: center; padding: 40px; color: #94a3b8; font-size: 13px; }
+
+@media (max-width: 600px) {
+  .gen-form { flex-direction: column; }
+  th:nth-child(4), td:nth-child(4), th:nth-child(5), td:nth-child(5) { display: none; }
+}
+</style>
+</head>
+<body>
+<!-- 登录界面 -->
+<div id="loginPage" class="login-box">
+  <h1>🔐 BOSS License 管理</h1>
+  <input type="password" id="adminKeyInput" placeholder="管理员密钥" autofocus>
+  <button onclick="login()">登录</button>
+  <div id="loginError" style="color:#ef4444;font-size:12px;margin-top:8px;display:none;"></div>
+</div>
+
+<!-- 管理界面 -->
+<div id="adminPage" style="display:none;">
+  <div class="container">
+    <div class="header">
+      <h1>🔐 BOSS License 管理</h1>
+      <div class="header-actions">
+        <span class="dot"></span>
+        <span style="font-size:12px;color:#94a3b8;">服务运行中</span>
+        <button class="btn-logout" onclick="logout()">退出</button>
+      </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="stats" id="statsCards"></div>
+
+    <!-- 生成 License -->
+    <div class="gen-box">
+      <h3>📝 生成 License Key</h3>
+      <div class="gen-form">
+        <div><label>数量</label><input type="number" id="genCount" value="1" min="1" max="50" style="width:70px;"></div>
+        <div><label>套餐</label><select id="genPlan"><option value="pro">Pro</option><option value="basic">Basic</option></select></div>
+        <div><label>有效期</label><input type="date" id="genExpiry" style="width:140px;"></div>
+        <div><label>备注</label><input type="text" id="genNote" placeholder="客户/用途" style="width:120px;"></div>
+        <button onclick="generateKeys()" style="align-self:end;">🚀 生成</button>
+      </div>
+      <div class="gen-result" id="genResult">
+        <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">✅ 已生成，请复制并发送给用户：</div>
+        <div class="keys" id="genKeys"></div>
+        <button class="copy-btn" onclick="copyGenerated()">📋 一键复制全部</button>
+      </div>
+    </div>
+
+    <!-- License 列表 -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>License Key</th><th>套餐</th><th>状态</th><th>绑定设备</th><th>到期</th><th>操作</th></tr>
+        </thead>
+        <tbody id="licenseTable"></tbody>
+      </table>
+      <div class="empty" id="emptyHint" style="display:none;">暂无 License，点击上方生成</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" style="display:none;"></div>
+
+<script>
+let adminToken = localStorage.getItem('boss_admin_token');
+
+// 页面初始化
+if (adminToken) { showAdmin(); } else { document.getElementById('loginPage').style.display = 'block'; }
+
+// 回车登录
+document.getElementById('adminKeyInput').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+async function login() {
+  const key = document.getElementById('adminKeyInput').value.trim();
+  if (!key) return;
+  const resp = await fetch('/api/admin/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ adminKey: key }),
+  });
+  const data = await resp.json();
+  if (data.success) {
+    adminToken = key;
+    localStorage.setItem('boss_admin_token', key);
+    showAdmin();
+  } else {
+    document.getElementById('loginError').textContent = '密钥错误';
+    document.getElementById('loginError').style.display = 'block';
+  }
+}
+
+function logout() {
+  localStorage.removeItem('boss_admin_token');
+  adminToken = null;
+  document.getElementById('loginPage').style.display = 'block';
+  document.getElementById('adminPage').style.display = 'none';
+}
+
+async function showAdmin() {
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('adminPage').style.display = 'block';
+  // 设置日期默认值
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  document.getElementById('genExpiry').value = d.toISOString().split('T')[0];
+  await loadLicenses();
+}
+
+async function api(method, path, body) {
+  const resp = await fetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminToken },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return resp.json();
+}
+
+async function loadLicenses() {
+  const data = await api('GET', '/api/admin/licenses');
+  if (data.error) { logout(); return; }
+  const list = data.licenses || [];
+  renderStats(list);
+  renderTable(list);
+}
+
+function renderStats(list) {
+  const total = list.length;
+  const active = list.filter(l => l.status === 'active').length;
+  const unused = list.filter(l => l.status === 'unused').length;
+  const revoked = list.filter(l => l.status === 'revoked').length;
+  document.getElementById('statsCards').innerHTML = `
+    <div class="stat-card total"><div class="value">${total}</div><div class="label">总计</div></div>
+    <div class="stat-card active"><div class="value">${active}</div><div class="label">已激活</div></div>
+    <div class="stat-card unused"><div class="value">${unused}</div><div class="label">未使用</div></div>
+    <div class="stat-card revoked"><div class="value">${revoked}</div><div class="label">已吊销</div></div>
+  `;
+}
+
+function renderTable(list) {
+  const tbody = document.getElementById('licenseTable');
+  if (list.length === 0) {
+    tbody.innerHTML = '';
+    document.getElementById('emptyHint').style.display = 'block';
+    return;
+  }
+  document.getElementById('emptyHint').style.display = 'none';
+  tbody.innerHTML = list.map(l => `
+    <tr>
+      <td><span class="key-cell">${esc(l.key)}</span></td>
+      <td>${l.plan || 'pro'}</td>
+      <td><span class="status ${l.status}">${statusText(l.status)}</span></td>
+      <td>${l.machineName || '-'}</td>
+      <td>${l.expiresAt || '-'}</td>
+      <td class="actions">
+        <button class="copy" onclick="copyKey('${esc(l.key)}')">复制</button>
+        ${l.status === 'active' ? `<button class="danger" onclick="unbindKey('${esc(l.key)}')">解绑</button>` : ''}
+        ${l.status !== 'revoked' ? `<button class="danger" onclick="revokeKey('${esc(l.key)}')">吊销</button>` : ''}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function statusText(s) {
+  const map = { active: '已激活', unused: '未使用', expired: '已过期', revoked: '已吊销' };
+  return map[s] || s;
+}
+
+function esc(s) { return s.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+async function generateKeys() {
+  const count = parseInt(document.getElementById('genCount').value) || 1;
+  const plan = document.getElementById('genPlan').value;
+  const expiresAt = document.getElementById('genExpiry').value;
+  const note = document.getElementById('genNote').value;
+  const data = await api('POST', '/api/admin/generate', { count, plan, expiresAt, note });
+  if (data.success) {
+    document.getElementById('genKeys').textContent = data.generated.map(g => g.key).join('\n');
+    document.getElementById('genResult').style.display = 'block';
+    await loadLicenses();
+  } else {
+    toast('生成失败: ' + (data.error || '未知错误'), 'error');
+  }
+}
+
+function copyGenerated() {
+  const text = document.getElementById('genKeys').textContent;
+  navigator.clipboard.writeText(text).then(() => toast('已复制到剪贴板'));
+}
+
+async function copyKey(key) {
+  await navigator.clipboard.writeText(key);
+  toast('已复制: ' + key.substring(0, 20) + '...');
+}
+
+async function unbindKey(key) {
+  if (!confirm('确定解绑此 License？解绑后用户可在其他设备重新激活。')) return;
+  const data = await api('POST', '/api/admin/unbind', { licenseKey: key });
+  if (data.success) { toast('已解绑'); await loadLicenses(); }
+  else { toast(data.error, 'error'); }
+}
+
+async function revokeKey(key) {
+  if (!confirm('确定吊销此 License？吊销后该 License 将永久失效。')) return;
+  const data = await api('POST', '/api/admin/revoke', { licenseKey: key });
+  if (data.success) { toast('已吊销'); await loadLicenses(); }
+  else { toast(data.error, 'error'); }
+}
+
+function toast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast ' + type;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 2500);
+}
+</script>
+</body>
+</html>

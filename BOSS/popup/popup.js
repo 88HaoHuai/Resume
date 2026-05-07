@@ -57,6 +57,138 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateStatusUI('idle');
   });
 
+  // ========== License 激活（极简版：直调 API，明文存储）==========
+  const licenseBar = document.getElementById('licenseBar');
+  const licenseText = document.getElementById('licenseText');
+  const licenseIcon = document.getElementById('licenseIcon');
+  const licenseMsg = document.getElementById('licenseMsg');
+
+  const API_BASE = 'http://localhost:3005/api';
+  const SESSION_KEY = 'boss_license_session';
+  const MACHINE_KEY = 'boss_machine_id';
+
+  function mid() {
+    // 简单的设备标识：生成一次，复用
+    const parts = [navigator.hardwareConcurrency, navigator.platform, screen.width, screen.height, navigator.language];
+    return parts.join('_');
+  }
+
+  async function getSession() {
+    const r = await chrome.storage.local.get(SESSION_KEY);
+    return r[SESSION_KEY] || null;
+  }
+
+  async function saveSession(token) {
+    await chrome.storage.local.set({
+      [SESSION_KEY]: { token, machineId: mid(), lastCheck: Date.now() }
+    });
+  }
+
+  // 显示 License 输入栏
+  function showLicenseInput(reason, msg) {
+    licenseBar.style.display = 'block';
+    document.getElementById('licenseInputRow').style.display = 'flex';
+    document.getElementById('btnActivateLicense').style.display = 'none';
+    const map = {
+      unactivated: ['🔒', 'License 未激活 — 输入 Key 激活', '#fbbf24'],
+      expired: ['⏰', 'License 已过期 — 请联系续费', '#ef4444'],
+      mismatch: ['💻', msg || '设备不匹配 — 请重新激活', '#ef4444'],
+    };
+    const s = map[reason] || map.unactivated;
+    licenseIcon.textContent = s[0];
+    licenseText.textContent = s[1];
+    licenseText.style.color = s[2];
+  }
+
+  function hideLicenseInput() {
+    licenseBar.style.display = 'none';
+  }
+
+  // 初始检查
+  (async () => {
+    const session = await getSession();
+    if (!session || !session.token) {
+      showLicenseInput('unactivated');
+      return;
+    }
+    // 快速检查：有 token 就认为已激活（避免每次打开都联网）
+    hideLicenseInput();
+    // 后台静默验证
+    try {
+      const resp = await fetch(`${API_BASE}/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionToken: session.token, machineId: mid() }),
+      });
+      const r = await resp.json();
+      if (!r.valid) {
+        showLicenseInput(r.reason === 'machine_mismatch' ? 'mismatch' : 'expired', r.reason);
+      }
+    } catch (_) { /* 离线时用缓存 */ }
+  })();
+
+  // 按钮事件
+  document.getElementById('btnActivateLicense').addEventListener('click', () => {
+    document.getElementById('licenseInputRow').style.display = 'flex';
+    document.getElementById('btnActivateLicense').style.display = 'none';
+    licenseMsg.style.display = 'none';
+  });
+
+  document.getElementById('btnCancelLicense').addEventListener('click', () => {
+    document.getElementById('licenseInputRow').style.display = 'none';
+    document.getElementById('licenseKeyInput').value = '';
+    licenseMsg.style.display = 'none';
+    document.getElementById('btnActivateLicense').style.display = 'inline-block';
+  });
+
+  document.getElementById('btnSubmitLicense').addEventListener('click', async () => {
+    const key = document.getElementById('licenseKeyInput').value.trim();
+    if (!key) return;
+
+    licenseMsg.style.display = 'block';
+    licenseMsg.style.color = '#94a3b8';
+    licenseMsg.textContent = '1/3 正在连接服务器...';
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+
+      licenseMsg.textContent = '2/3 发送激活请求...';
+      const resp = await fetch(`${API_BASE}/activate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ licenseKey: key, machineId: mid(), machineName: navigator.platform }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      licenseMsg.textContent = '3/3 处理响应...';
+      const result = await resp.json();
+
+      if (resp.ok && result.success) {
+        await saveSession(result.sessionToken);
+        licenseMsg.style.color = '#22c55e';
+        licenseMsg.textContent = '✅ 激活成功！';
+        setTimeout(() => {
+          hideLicenseInput();
+          document.getElementById('licenseInputRow').style.display = 'none';
+          licenseMsg.style.display = 'none';
+        }, 800);
+      } else {
+        licenseMsg.style.color = '#ef4444';
+        licenseMsg.textContent = '❌ ' + (result.error || '激活失败');
+      }
+    } catch (e) {
+      licenseMsg.style.color = '#ef4444';
+      const message = e.name === 'AbortError'
+        ? '请求超时，请确认授权服务是否正常'
+        : (e.message === 'Failed to fetch'
+          ? '授权服务未启动或无法访问，请先启动 localhost:3005'
+          : e.message || '网络错误');
+      licenseMsg.textContent = '❌ ' + message;
+    }
+  });
+
   // ========== 聊天批量发图 ==========
   const btnChatResume = document.getElementById('btnChatResume');
   const chatResumeProgress = document.getElementById('chatResumeProgress');
@@ -87,6 +219,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         chatResumeProgress.style.display = 'block';
         chatResumeProgress.textContent = '正在发送...';
         chatResumeRunning = true;
+      } else if (resp?.error === 'license_invalid') {
+        chatResumeProgress.style.display = 'block';
+        chatResumeProgress.style.color = '#fbbf24';
+        chatResumeProgress.textContent = '🔒 License 未激活，请在顶部输入 License Key';
+        checkLicenseStatus();
       } else {
         chatResumeProgress.style.display = 'block';
         chatResumeProgress.textContent = '❌ ' + (resp?.error || '启动失败，请确认在聊天页面');
@@ -165,8 +302,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadResumeTab();
   document.getElementById('btnSaveApiKey').addEventListener('click', async () => {
     const key = document.getElementById('apiKeyInput').value.trim();
-    await chrome.storage.local.set({ boss_api_key: key });
-    showToast('API Key 已保存');
+    const model = document.getElementById('apiModelInput').value.trim() || 'deepseek-chat';
+    const baseUrl = document.getElementById('apiBaseUrlInput').value.trim() || 'https://api.deepseek.com/v1';
+    // XOR 加密存储（与 ApiKeyService 一致）
+    const seed = 'boss_resume_optimizer_2024';
+    let enc = '';
+    for (let i = 0; i < key.length; i++) {
+      enc += String.fromCharCode(key.charCodeAt(i) ^ seed.charCodeAt(i % seed.length));
+    }
+    await chrome.storage.local.set({
+      boss_api_key: key ? btoa(enc) : '',
+      boss_api_config: { model, baseUrl },
+    });
+    showToast('API 配置已保存');
   });
   document.getElementById('btnOpenDashboard').addEventListener('click', () => {
     chrome.tabs.create({ url: chrome.runtime.getURL('dashboard/dashboard.html') });
@@ -299,7 +447,14 @@ async function refreshStatus() {
 
 function sendMsg(msg) {
   return new Promise(resolve => {
-    chrome.runtime.sendMessage(msg, resolve);
+    chrome.runtime.sendMessage(msg, response => {
+      if (chrome.runtime.lastError) {
+        console.error('sendMsg error:', chrome.runtime.lastError.message);
+        resolve({ success: false, error: '通信失败: ' + chrome.runtime.lastError.message });
+      } else {
+        resolve(response);
+      }
+    });
   });
 }
 
@@ -373,10 +528,10 @@ async function exportCSV() {
 }
 
 async function loadResumeTab() {
-  const apiKeyResult = await chrome.storage.local.get('boss_api_key');
-  const encryptedKey = apiKeyResult.boss_api_key;
+  // Load API config
+  const cfgResult = await chrome.storage.local.get(['boss_api_key', 'boss_api_config']);
+  const encryptedKey = cfgResult.boss_api_key;
   if (encryptedKey) {
-    // Simple XOR decrypt (mirrors ApiKeyService._decrypt)
     try {
       const decoded = atob(encryptedKey);
       const seed = 'boss_resume_optimizer_2024';
@@ -387,6 +542,9 @@ async function loadResumeTab() {
       document.getElementById('apiKeyInput').value = key;
     } catch (_) {}
   }
+  const cfg = cfgResult.boss_api_config || {};
+  document.getElementById('apiModelInput').value = cfg.model || 'deepseek-chat';
+  document.getElementById('apiBaseUrlInput').value = cfg.baseUrl || 'https://api.deepseek.com/v1';
 
   // Load resume versions for select
   const versionsResult = await chrome.storage.local.get('boss_resume_versions');

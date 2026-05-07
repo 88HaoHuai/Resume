@@ -191,12 +191,22 @@
             <input type="text" id="apiBaseUrl" placeholder="https://api.deepseek.com/v1" class="input-full">
           </div>
           <div class="form-group">
-            <label>模型</label>
-            <select id="apiModel" class="input-full">
-              <option value="deepseek-v4">deepseek-v4</option>
-              <option value="deepseek-chat">deepseek-chat (V3)</option>
-              <option value="deepseek-reasoner">deepseek-reasoner (R1)</option>
-            </select>
+            <label>模型 <small>(可选可输入)</small></label>
+            <input type="text" id="apiModel" class="input-full" placeholder="deepseek-chat" list="modelSuggestions" autocomplete="off">
+            <datalist id="modelSuggestions">
+              <option value="deepseek-chat">
+              <option value="deepseek-reasoner">
+              <option value="gpt-4o">
+              <option value="gpt-4o-mini">
+              <option value="gpt-4-turbo">
+              <option value="claude-3-5-sonnet">
+              <option value="claude-3-haiku">
+              <option value="qwen-turbo">
+              <option value="qwen-plus">
+              <option value="glm-4">
+              <option value="moonshot-v1-8k">
+            </datalist>
+            <small style="color:#94a3b8;">支持 DeepSeek / OpenAI / 通义千问 / 智谱 等兼容 OpenAI 接口的模型，也可手动输入</small>
           </div>
           <div class="form-actions">
             <button class="btn btn-small" id="btnValidateKey">🔍 验证 Key</button>

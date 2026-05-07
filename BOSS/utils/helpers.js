@@ -89,22 +89,51 @@ const BossHelper = {
   },
 
   /**
-   * 从薪资文本中解析出数字范围
-   * 例如 "15-30K" → { min: 15, max: 30 }
-   * 例如 "15-30K·14薪" → { min: 15, max: 30 }
+   * 从薪资文本中解析出月薪范围，单位统一为 K。
+   * 例如 "15-30K" → { min: 15, max: 30, parsed: true }
+   * 例如 "1.5-3万" → { min: 15, max: 30, parsed: true }
+   * 例如 BOSS 混淆字符 "-K" → { min: 20, max: 40, parsed: true }
    * @param {string} salaryText - 薪资文本
-   * @returns {{min: number, max: number}}
+   * @returns {{min: number, max: number, parsed: boolean}}
    */
   parseSalary(salaryText) {
-    if (!salaryText) return { min: 0, max: 0 };
-    const match = salaryText.match(/(\d+)-(\d+)/);
+    if (!salaryText) return { min: 0, max: 0, parsed: false };
+
+    const text = String(salaryText)
+      .replace(/[\uE000-\uF8FF]/g, (ch) => {
+        const lo = ch.charCodeAt(0) & 0xFF;
+        return lo >= 0x30 && lo <= 0x39 ? String.fromCharCode(lo) : ch;
+      })
+      .replace(/\s+/g, '');
+
+    if (/面议|薪资面议/.test(text)) return { min: 0, max: 0, parsed: false };
+
+    let match = text.match(/(\d+(?:\.\d+)?)\s*[Kk]\s*[-~～]\s*(\d+(?:\.\d+)?)\s*[Kk]/);
     if (match) {
-      return {
-        min: parseInt(match[1], 10),
-        max: parseInt(match[2], 10),
-      };
+      return { min: Number(match[1]), max: Number(match[2]), parsed: true };
     }
-    return { min: 0, max: 0 };
+
+    match = text.match(/(\d+(?:\.\d+)?)\s*[-~～]\s*(\d+(?:\.\d+)?)\s*[Kk]/);
+    if (match) {
+      return { min: Number(match[1]), max: Number(match[2]), parsed: true };
+    }
+
+    match = text.match(/(\d+(?:\.\d+)?)\s*[-~～]\s*(\d+(?:\.\d+)?)\s*万/);
+    if (match) {
+      return { min: Number(match[1]) * 10, max: Number(match[2]) * 10, parsed: true };
+    }
+
+    match = text.match(/(\d+(?:\.\d+)?)\s*[-~～]\s*(\d+(?:\.\d+)?)\s*千/);
+    if (match) {
+      return { min: Number(match[1]), max: Number(match[2]), parsed: true };
+    }
+
+    match = text.match(/(\d{4,6})\s*[-~～]\s*(\d{4,6})\s*元/);
+    if (match) {
+      return { min: Number(match[1]) / 1000, max: Number(match[2]) / 1000, parsed: true };
+    }
+
+    return { min: 0, max: 0, parsed: false };
   },
 
   /**
